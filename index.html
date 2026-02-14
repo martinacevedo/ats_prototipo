@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATS Parsing Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap');
+        .console-font { font-family: 'Fira Code', monospace; }
+        .scroll-custom::-webkit-scrollbar { width: 6px; }
+        .scroll-custom::-webkit-scrollbar-track { background: #1e293b; }
+        .scroll-custom::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-slate-900 min-h-screen text-slate-200 font-sans p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto grid lg:grid-cols-2 gap-8">
+        
+        <!-- PANEL DE CONTROL -->
+        <div class="space-y-6">
+            <header>
+                <h1 class="text-3xl font-black text-white tracking-tight">ATS <span class="text-blue-500">PARSER</span> LAB</h1>
+                <p class="text-slate-400 text-sm">Configura los parámetros del filtro y observa el log técnico.</p>
+            </header>
+
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+                <h2 class="text-lg font-bold text-white mb-4 flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                    Criterios del Algoritmo
+                </h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Keywords Críticas</label>
+                        <input id="mustWords" type="text" value="Python, React, SQL" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm focus:border-blue-500 outline-none transition-all">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Años Mínimos</label>
+                            <input id="minYears" type="number" value="2" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Umbral Match %</label>
+                            <input id="threshold" type="number" value="60" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm outline-none">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+                <h2 class="text-lg font-bold text-white mb-4 italic">Carga de Candidato</h2>
+                <input type="file" id="cvInput" class="hidden" accept=".pdf">
+                <label for="cvInput" class="block border-2 border-dashed border-slate-600 rounded-xl p-8 text-center hover:border-blue-500 hover:bg-slate-700/50 transition-all cursor-pointer">
+                    <div class="text-blue-500 font-bold mb-1">Sube tu CV en formato PDF</div>
+                    <p id="fileName" class="text-xs text-slate-500 italic">No hay archivo seleccionado</p>
+                </label>
+                <button onclick="startParsing()" class="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-xl transition-all shadow-lg shadow-blue-900/20 active:scale-95">
+                    EJECUTAR PARSING & MATCHING
+                </button>
+            </div>
+        </div>
+
+        <!-- CONSOLA DE PARSING (EL LOG TÉCNICO) -->
+        <div class="flex flex-col h-full space-y-4">
+            <div class="bg-black rounded-2xl overflow-hidden border border-slate-700 shadow-2xl flex-grow flex flex-col">
+                <div class="bg-slate-800 px-4 py-2 border-b border-slate-700 flex items-center justify-between">
+                    <div class="flex space-x-2">
+                        <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+                        <div class="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                        <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                    </div>
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Parsing Console v2.0</span>
+                </div>
+                <div id="consoleBody" class="p-6 console-font text-xs leading-relaxed overflow-y-auto h-[450px] scroll-custom text-emerald-500">
+                    <div class="text-slate-500 italic mb-2">// Esperando inicialización de datos...</div>
+                </div>
+            </div>
+
+            <!-- RESULTADO RÁPIDO -->
+            <div id="finalScoreCard" class="bg-blue-600 rounded-2xl p-6 text-white hidden animate-bounce-short">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h3 class="text-xs font-bold uppercase opacity-80">Match Final</h3>
+                        <p id="matchVerdict" class="text-xl font-black">ANALIZANDO...</p>
+                    </div>
+                    <div id="scoreDisplay" class="text-4xl font-black">0%</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        let cvRawText = "";
+
+        function printLog(message, type = 'info') {
+            const consoleBody = document.getElementById('consoleBody');
+            const timestamp = new Date().toLocaleTimeString([], { hour12: false });
+            let color = "text-emerald-500";
+            let prefix = "[INFO]";
+
+            if(type === 'warn') { color = "text-yellow-400"; prefix = "[WARN]"; }
+            if(type === 'error') { color = "text-red-400"; prefix = "[ERR]"; }
+            if(type === 'process') { color = "text-blue-400"; prefix = "[PROC]"; }
+
+            consoleBody.innerHTML += `<div class="${color} mb-1"><span class="opacity-50">${timestamp}</span> ${prefix} ${message}</div>`;
+            consoleBody.scrollTop = consoleBody.scrollHeight;
+        }
+
+        document.getElementById('cvInput').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            document.getElementById('fileName').innerText = file.name;
+            printLog(`Iniciando carga de archivo binario: ${file.name}`, 'process');
+            
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                printLog(`PDF detectado: ${pdf.numPages} página(s).`);
+                
+                let extracted = "";
+                for(let i=1; i<=pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    const text = content.items.map(s => s.str).join(" ");
+                    extracted += text + " ";
+                    printLog(`Página ${i} procesada: ${content.items.length} tokens extraídos.`);
+                }
+                
+                cvRawText = extracted.toLowerCase();
+                printLog(`Parsing de texto completado. Buffer de memoria actualizado.`, 'success');
+            } catch (err) {
+                printLog(`Fallo crítico en el parsing: ${err.message}`, 'error');
+            }
+        });
+
+        function startParsing() {
+            if(!cvRawText) {
+                printLog("No se detectó buffer de texto. Sube un PDF primero.", "error");
+                return;
+            }
+
+            document.getElementById('finalScoreCard').classList.remove('hidden');
+            printLog("Iniciando motor de Matching...", "process");
+
+            // 1. Criterios
+            const must = document.getElementById('mustWords').value.split(',').map(s => s.trim().toLowerCase()).filter(s => s);
+            const minExp = parseInt(document.getElementById('minYears').value);
+            const threshold = parseInt(document.getElementById('threshold').value);
+
+            printLog(`Criterios cargados: ${must.length} keywords críticas requeridas.`);
+
+            // 2. Buscando Keywords
+            let found = must.filter(w => {
+                const present = cvRawText.includes(w);
+                if(present) printLog(`Keyword encontrada: "${w}"`, 'info');
+                else printLog(`FALTA keyword crítica: "${w}"`, 'warn');
+                return present;
+            });
+
+            // 3. Extrayendo Años (Regex)
+            printLog("Ejecutando escaneo de experiencia cronológica...", "process");
+            const yearPatterns = [/(\d+)\s*(años|years|yrs|año)/g];
+            let detectedYears = 0;
+            yearPatterns.forEach(p => {
+                let match;
+                while ((match = p.exec(cvRawText)) !== null) {
+                    const y = parseInt(match[1]);
+                    if(y > detectedYears && y < 45) detectedYears = y;
+                }
+            });
+
+            if(detectedYears > 0) printLog(`Años de experiencia detectados: ${detectedYears}`);
+            else printLog("No se pudo detectar experiencia numérica clara.", "warn");
+
+            // 4. Score Final
+            let score = (must.length > 0) ? (found.length / must.length) * 100 : 0;
+            
+            // Penalización por experiencia
+            if(detectedYears < minExp) {
+                printLog(`Penalización: Candidato tiene ${detectedYears} años, se requieren ${minExp}. Reduciendo score.`, "error");
+                score = Math.max(0, score - 20);
+            }
+
+            // 5. Veredicto
+            const finalScore = Math.round(score);
+            document.getElementById('scoreDisplay').innerText = finalScore + "%";
+            
+            const verdict = document.getElementById('matchVerdict');
+            if(finalScore >= threshold) {
+                verdict.innerText = "PASAR A ENTREVISTA";
+                printLog(`RESULTADO: Score ${finalScore}% supera el umbral de ${threshold}%.`, "success");
+            } else {
+                verdict.innerText = "RECHAZAR AUTOMÁTICAMENTE";
+                printLog(`RESULTADO: Score ${finalScore}% por debajo del umbral de ${threshold}%.`, "error");
+            }
+        }
+    </script>
+</body>
+</html>
